@@ -1,7 +1,11 @@
-# claves y secrets
+﻿# Ignorar secrets y archivos temporales
+node_modules/
+.env
 *.key.json
 *sdk-*.json
 firebase-admin-key.json
 sistema-auto-*-firebase-adminsdk-*.json
-.env
+*.bundle
+.vscode/
+.venv/
 
