@@ -1,0 +1,7 @@
+# claves y secrets
+*.key.json
+*sdk-*.json
+firebase-admin-key.json
+sistema-auto-*-firebase-adminsdk-*.json
+.env
+
