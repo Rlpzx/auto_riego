@@ -1,0 +1,203 @@
+// public/main-ui.js
+const mainUI = (() => {
+  const BASE = ''; // la UI se sirve desde el mismo dominio
+  const socket = io();
+  const state = { sections: {}, soilTrend: [] };
+
+  // Helper: fetch JSON safe
+  async function fetchJson(url, opts) {
+    const r = await fetch(url, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // Cargar lista de secciones desde Firebase via proxy
+  async function loadSectionsList() {
+    try {
+      // Asumimos que en la DB hay /vivero/secciones con keys
+      const data = await fetchJson(`${BASE}/firebase-proxy?path=/vivero/secciones`);
+      // data is object of sections
+      state.sections = data || {};
+      return state.sections;
+    } catch (e) {
+      console.warn('loadSectionsList error', e);
+      return {};
+    }
+  }
+
+  // Render tarjeta compacta para dashboard
+  function renderQuickSections(containerEl) {
+    containerEl.innerHTML = '';
+    const keys = Object.keys(state.sections).sort();
+    document.getElementById('total-sections').textContent = keys.length;
+    let valvesOpen = 0;
+    keys.forEach(k => {
+      const d = state.sections[k] || {};
+      if (d.valvula === 'on') valvesOpen++;
+      const card = document.createElement('div');
+      card.className = 'section-card';
+      card.innerHTML = `<div><h4>${k}</h4><div class="meta">Hum. suelo: ${d.humedad_suelo ?? '-'} · Temp: ${d.temp ?? '-'}</div></div>
+        <div class="controls"><a href="/section.html?id=${encodeURIComponent(k)}" class="btn">Abrir</a></div>`;
+      containerEl.appendChild(card);
+    });
+    document.getElementById('valves-open').textContent = valvesOpen;
+  }
+
+  // Dashboard init
+  async function initDashboard() {
+    document.getElementById('backend-url').textContent = location.origin;
+    // load initial
+    await loadSectionsList();
+    renderQuickSections(document.getElementById('quick-sections'));
+    // build small trend chart
+    const ctx = document.getElementById('soil-trend').getContext('2d');
+    const soilChart = new Chart(ctx, { type:'line', data:{ labels:[], datasets:[{label:'Humedad suelo', data:[], fill:false}] }, options:{responsive:true}});
+    // compute KPIs
+    updateKPIs();
+    // socket updates
+    socket.on('sensor-update', d => {
+      // update local state and UI
+      state.sections[d.section] = d.payload;
+      renderQuickSections(document.getElementById('quick-sections'));
+      updateKPIs();
+      // add trend point
+      soilChart.data.labels.push(new Date().toLocaleTimeString());
+      soilChart.data.datasets[0].data.push(d.payload.humedad_suelo || 0);
+      if (soilChart.data.labels.length > 20) { soilChart.data.labels.shift(); soilChart.data.datasets[0].data.shift(); }
+      soilChart.update();
+      // alerts
+      if (d.suggestion && d.suggestion.suggestionText) {
+        const alerts = document.getElementById('alerts');
+        const p = document.createElement('div'); p.textContent = `${d.section}: ${d.suggestion.suggestionText}`; alerts.prepend(p);
+      }
+    });
+  }
+
+  function updateKPIs() {
+    const keys = Object.keys(state.sections);
+    if (!keys.length) return;
+    let tSum=0, soilSum=0, luxSum=0, cnt=0, last=null;
+    keys.forEach(k => {
+      const v = state.sections[k];
+      if (!v) return;
+      if (v.temp) { tSum += Number(v.temp); }
+      if (v.humedad_suelo) { soilSum += Number(v.humedad_suelo); }
+      if (v.luminosidad) { luxSum += Number(v.luminosidad); }
+      cnt++;
+      last = v.ultima_actualizacion || last;
+    });
+    document.getElementById('avg-temp').textContent = cnt? (tSum/cnt).toFixed(1)+' °C':'--';
+    document.getElementById('avg-soil').textContent = cnt? Math.round(soilSum/cnt):'--';
+    document.getElementById('avg-lux').textContent = cnt? Math.round(luxSum/cnt):'--';
+    document.getElementById('last-update').textContent = last? new Date(last).toLocaleString():'--';
+  }
+
+  // Sections page
+  async function initSections() {
+    const container = document.getElementById('sections-container');
+    document.getElementById('refresh-btn').addEventListener('click', async ()=> { await reloadSections(); });
+    document.getElementById('filter-input').addEventListener('input', e => filterSections(e.target.value));
+    await reloadSections();
+    socket.on('sensor-update', d => { state.sections[d.section]=d.payload; reloadSections(); });
+  }
+
+  async function reloadSections() {
+    await loadSectionsList();
+    const container = document.getElementById('sections-container');
+    container.innerHTML = '';
+    const keys = Object.keys(state.sections).sort();
+    keys.forEach(k => {
+      const v = state.sections[k] || {};
+      const el = document.createElement('div'); el.className='section-card';
+      el.innerHTML = `<div><h4>${k}</h4><div class="meta">Hum: ${v.humedad_suelo ?? '-'} · Temp: ${v.temp ?? '-'}</div></div>
+        <div class="controls"><a href="/section.html?id=${encodeURIComponent(k)}" class="btn">Ver</a></div>`;
+      container.appendChild(el);
+    });
+    document.getElementById('total-sections').textContent = keys.length;
+  }
+
+  function filterSections(q) {
+    const container = document.getElementById('sections-container');
+    const items = Array.from(container.children);
+    items.forEach(it => {
+      const t = it.textContent.toLowerCase();
+      it.style.display = t.includes(q.toLowerCase())? 'block':'none';
+    });
+  }
+
+  // Section detail view
+  async function initSectionView() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    if (!id) { document.getElementById('section-title').textContent = 'Sección no especificada'; return; }
+    document.getElementById('section-title').textContent = id;
+    const btnOn = document.getElementById('btn-on'), btnOff = document.getElementById('btn-off');
+    btnOn.addEventListener('click', ()=> uiControl(id,'on'));
+    btnOff.addEventListener('click', ()=> uiControl(id,'off'));
+
+    // charts
+    const ctxSoil = document.getElementById('chart-soil').getContext('2d');
+    const soilChart = new Chart(ctxSoil, { type:'line', data:{labels:[], datasets:[{label:'Humedad suelo', data:[]}]}, options:{responsive:true}});
+
+    const ctxTemp = document.getElementById('chart-temp').getContext('2d');
+    const tempChart = new Chart(ctxTemp, { type:'line', data:{labels:[], datasets:[{label:'Temp', data:[]}, {label:'Humedad amb', data:[]}]}, options:{responsive:true}});
+
+    // load recent (simple: query proxy last node — we assume realtime DB keeps last record at /vivero/secciones/<id>)
+    async function refresh() {
+      try {
+        const data = await fetchJson(`/firebase-proxy?path=/vivero/secciones/${encodeURIComponent(id)}`);
+        if (!data) return;
+        document.getElementById('last-read').textContent = data.ultima_actualizacion || '--';
+        // push points
+        const now = new Date().toLocaleTimeString();
+        if (data.humedad_suelo !== undefined) { soilChart.data.labels.push(now); soilChart.data.datasets[0].data.push(data.humedad_suelo); }
+        if (data.temp !== undefined) { tempChart.data.labels.push(now); tempChart.data.datasets[0].data.push(data.temp); tempChart.data.datasets[1].data.push(data.humedad_amb || 0); }
+        if (soilChart.data.labels.length>30) { soilChart.data.labels.shift(); soilChart.data.datasets[0].data.shift(); tempChart.data.labels.shift(); tempChart.data.datasets[0].data.shift(); tempChart.data.datasets[1].data.shift(); }
+        soilChart.update(); tempChart.update();
+
+        const logs = document.getElementById('recent-logs'); logs.prepend(JSON.stringify(data)+'\n');
+      } catch(e){ console.warn(e) }
+    }
+
+    await refresh();
+    socket.on('sensor-update', d => { if (d.section===id){ refresh(); } });
+  }
+
+  // UI control that posts to proxy endpoint
+  async function uiControl(section, action) {
+    try {
+      const res = await fetch(`/api/ui/control`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ section, action }) });
+      if (!res.ok) { alert('Error control '+res.status); return; }
+      const j = await res.json();
+      console.log('control result', j);
+    } catch (e) { console.error(e); }
+  }
+
+  // Reports page
+  async function initReports() {
+    const canvas = document.getElementById('report-soil').getContext('2d');
+    const chart = new Chart(canvas, { type:'bar', data:{ labels:[], datasets:[{label:'Humedad promedio', data:[]}] }});
+    document.getElementById('gen-report').addEventListener('click', async () => {
+      // simple demo: average current sections
+      await loadSectionsList();
+      const keys = Object.keys(state.sections);
+      chart.data.labels = keys;
+      chart.data.datasets[0].data = keys.map(k => state.sections[k]?.humedad_suelo || 0);
+      chart.update();
+    });
+  }
+
+  // Settings page
+  async function initSettings() {
+    document.getElementById('save-settings').addEventListener('click', ()=> alert('Guardado (demo)'));
+    const simulate = document.getElementById('simulate');
+    simulate.addEventListener('change', async (e) => {
+      // llamar al backend para habilitar simulación global (implementar si lo deseas)
+      alert('Cambio guardado (demo)');
+    });
+  }
+
+  return {
+    initDashboard, initSections, initSectionView, initReports, initSettings
+  };
+})();

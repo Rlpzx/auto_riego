@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Secciones — Auto Riego</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/libs/chart.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="brand"><h1>Secciones</h1></div>
+    <nav class="nav">
+      <a href="/index.html">Dashboard</a>
+      <a href="/sections.html" class="active">Secciones</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/settings.html">Ajustes</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand-small"><strong>Filtrar</strong></div>
+      <div class="search"><input id="filter-input" placeholder="buscar por nombre..." /></div>
+      <div style="height:8px"></div>
+      <div class="brand-small"><strong>Acciones</strong></div>
+      <div class="side-item" id="refresh-btn">Refrescar</div>
+    </aside>
+
+    <main class="main">
+      <div class="card">
+        <h3>Todas las secciones</h3>
+        <div id="sections-container" class="section-list"></div>
+      </div>
+      <div class="footer">Mostrando secciones en tiempo real</div>
+    </main>
+  </div>
+
+  <script src="/main-ui.js"></script>
+  <script> mainUI.initSections(); </script>
+</body>
+</html>

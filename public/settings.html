@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ajustes — Auto Riego</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="brand"><h1>Ajustes</h1></div>
+    <nav class="nav">
+      <a href="/index.html">Dashboard</a>
+      <a href="/sections.html">Secciones</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/settings.html" class="active">Ajustes</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand-small"><strong>Guardar</strong></div>
+      <div class="side-item" id="save-settings">Guardar cambios</div>
+    </aside>
+    <main class="main">
+      <div class="card">
+        <h3>Umbrales por sección</h3>
+        <div id="thresholds-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Simulación</h3>
+        <label><input type="checkbox" id="simulate"> Activar modo SIMULATE para dispositivos</label>
+      </div>
+
+      <div class="card">
+        <h3>Información</h3>
+        <p class="muted">Aquí podrás ajustar los umbrales y opciones globales.</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/main-ui.js"></script>
+  <script> mainUI.initSettings(); </script>
+</body>
+</html>

@@ -3,37 +3,70 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Vivero — Monitor y Control</title>
-
-  <!-- Chart.js CDN para gráficos sencillos -->
-<script src="/libs/chart.js"></script>
-
-  <!-- Socket.IO client - se cargará desde el mismo servidor -->
-  <script src="/socket.io/socket.io.js"></script>
-
+  <title>Auto Riego — Dashboard</title>
   <link rel="stylesheet" href="/style.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/libs/chart.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Vivero — Monitor y Control</h1>
-    <p id="status">Conectando...</p>
+  <header class="header">
+    <div class="brand">
+      <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#60a5fa)"></div>
+      <div>
+        <h1>Solutech — Auto Riego</h1>
+        <small style="color:var(--muted)">Monitoreo de vivero</small>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="/index.html" class="active">Dashboard</a>
+      <a href="/sections.html">Secciones</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/settings.html">Ajustes</a>
+    </nav>
   </header>
 
-  <main>
-    <section id="sections-container">
-      <!-- Plantillas de sección se generan desde app.js -->
-    </section>
-
-    <aside id="controls">
-      <h2>Controles</h2>
-      <div id="log"></div>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand-small"><strong>Resumen</strong></div>
+      <div class="side-item"><span>Total Secciones</span><strong id="total-sections">-</strong></div>
+      <div class="side-item"><span>Válvulas abiertas</span><strong id="valves-open">-</strong></div>
+      <div style="height:10px"></div>
+      <div class="brand-small"><strong>Buscar</strong></div>
+      <div class="search"><input id="global-search" placeholder="Buscar sección..." /></div>
     </aside>
-  </main>
 
-  <footer>
-    <small>Backend: <span id="backend-url"></span></small>
-  </footer>
+    <main class="main">
+      <div class="grid" id="kpis">
+        <div class="card kpi"><div><small>Temperatura promedio</small><div class="val" id="avg-temp">-- °C</div></div></div>
+        <div class="card kpi"><div><small>Humedad suelo promedio</small><div class="val" id="avg-soil">--</div></div></div>
+        <div class="card kpi"><div><small>Luminosidad promedio</small><div class="val" id="avg-lux">--</div></div></div>
+        <div class="card kpi"><div><small>Última actualización</small><div class="val" id="last-update">--</div></div></div>
+      </div>
 
-  <script src="/app.js"></script>
+      <div class="card">
+        <h3>Secciones (vista rápida)</h3>
+        <div id="quick-sections" class="section-list"></div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Tendencia humedad suelo (últimas lecturas)</h3>
+          <canvas id="soil-trend" style="height:220px"></canvas>
+        </div>
+        <div class="card">
+          <h3>Alertas y sugerencias</h3>
+          <div id="alerts" style="min-height:120px;color:var(--muted)"></div>
+        </div>
+      </div>
+
+      <div class="footer">Backend: <span id="backend-url"></span> · Solutech</div>
+    </main>
+  </div>
+
+  <script src="/main-ui.js"></script>
+  <script>
+    // Init dashboard view
+    mainUI.initDashboard();
+  </script>
 </body>
 </html>

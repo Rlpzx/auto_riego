@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sección — Auto Riego</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/libs/chart.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="brand"><h1 id="section-title">Sección</h1></div>
+    <nav class="nav">
+      <a href="/index.html">Dashboard</a>
+      <a href="/sections.html">Secciones</a>
+      <a href="/reports.html">Reportes</a>
+      <a href="/settings.html">Ajustes</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand-small"><strong>Controles</strong></div>
+      <div class="controls">
+        <button id="btn-on" class="btn">Encender válvula</button>
+        <button id="btn-off" class="btn ghost">Apagar válvula</button>
+      </div>
+      <div style="height:12px"></div>
+      <div class="brand-small"><strong>Info</strong></div>
+      <div class="side-item">Última lectura <span id="last-read">--</span></div>
+    </aside>
+
+    <main class="main">
+      <div class="grid">
+        <div class="card">
+          <h3>Humedad suelo</h3>
+          <canvas id="chart-soil" style="height:260px"></canvas>
+        </div>
+        <div class="card">
+          <h3>Temperatura & Humedad ambiente</h3>
+          <canvas id="chart-temp" style="height:260px"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Registro reciente</h3>
+        <div id="recent-logs" style="max-height:220px;overflow:auto;color:var(--muted)"></div>
+      </div>
+
+      <div class="footer">Controles remotos y telemetría</div>
+    </main>
+  </div>
+
+  <script src="/main-ui.js"></script>
+  <script> mainUI.initSectionView(); </script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Reportes — Auto Riego</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/libs/chart.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="brand"><h1>Reportes</h1></div>
+    <nav class="nav">
+      <a href="/index.html">Dashboard</a>
+      <a href="/sections.html">Secciones</a>
+      <a href="/reports.html" class="active">Reportes</a>
+      <a href="/settings.html">Ajustes</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand-small"><strong>Periodo</strong></div>
+      <div style="display:flex;gap:8px">
+        <input id="from" type="date"/>
+        <input id="to" type="date"/>
+      </div>
+      <div style="height:8px"></div>
+      <div class="side-item" id="gen-report">Generar reporte</div>
+    </aside>
+
+    <main class="main">
+      <div class="card">
+        <h3>Reporte: Humedad promedio por sección</h3>
+        <canvas id="report-soil" style="height:300px"></canvas>
+      </div>
+      <div class="footer">Exportar CSV próximamente</div>
+    </main>
+  </div>
+
+  <script src="/main-ui.js"></script>
+  <script> mainUI.initReports(); </script>
+</body>
+</html>
