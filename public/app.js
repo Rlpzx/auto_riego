@@ -87,35 +87,32 @@
 
   // Manual control button -> calls /api/control
   // Manual control button -> calls /api/control (with API key for local testing)
+// Manual control button -> calls /api/ui/control (proxy endpoint in server)
 async function manualControl(section, action) {
   try {
     const body = { section, action };
-    const res = await fetch(`http://localhost:3000/api/control`, {
+    const res = await fetch(`/api/ui/control`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': 'mi_api_key_super_secreta_12345' // SOLO para pruebas locales
-      },
-      body: JSON.stringify(body)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'same-origin'
     });
-
-    // if server returns 401 or other, show message
     if (!res.ok) {
       const txt = await res.text().catch(()=>null);
       log(`Control error ${res.status}: ${txt || res.statusText}`);
       return;
     }
-
     const j = await res.json();
     if (j.ok) {
-      log(`Control manual: ${section} -> ${action}`);
+      log(`Control manual (UI) enviado: ${section} -> ${action}`);
     } else {
       log(`Control error: ${JSON.stringify(j)}`);
     }
   } catch (err) {
-    log('Error control: ' + err.message);
+    log('Error control (UI): ' + err.message);
   }
 }
+
 
   // Poll initial states from server for each section
   async function fetchInitial() {

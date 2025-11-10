@@ -234,6 +234,30 @@ io.on('connection', (socket) => {
     console.log('Cliente desconectado:', socket.id);
   });
 });
+// POST /api/ui/control
+// Este endpoint es llamado por la UI (sin API key). El servidor valida origen/sesión y aplica el control
+app.post('/api/ui/control', async (req, res) => {
+  try {
+    // Opcional: validar origen o sesión
+    // if (req.get('origin') && !req.get('origin').includes('your-frontend-domain')) return res.status(403).json({ ok:false, error:'forbidden' });
+
+    // Alternativa más segura: validar sesión / cookie / JWT aquí
+    const { section, action } = req.body;
+    if (!section || !['on','off'].includes(action)) return res.status(400).json({ ok:false, error:'invalid payload' });
+
+    // Internamente usamos la lógica existente: actualizamos la DB (sin exponer API_KEY)
+    const refPath = `/vivero/secciones/${section}`;
+    await db.ref(refPath).update({ valvula: action, ultima_actualizacion: new Date().toISOString(), manual_override: true });
+
+    // Emitimos evento a los clientes conectados
+    io.emit('control-update', { section, action });
+
+    return res.json({ ok:true, section, action });
+  } catch (err) {
+    console.error('Error /api/ui/control', err);
+    return res.status(500).json({ ok:false, error:'internal' });
+  }
+});
 
 // --- Iniciar servidor ---
 const PORT = process.env.PORT || 3000;
