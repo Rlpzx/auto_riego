@@ -1,0 +1,30 @@
+:root{
+  --bg:#0f1724; --card:#0b1220; --accent:#3b82f6; --muted:#94a3b8; --text:#e6eef8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background:linear-gradient(180deg,#07102a 0%, #071029 100%);
+  color:var(--text);
+  min-height:100vh;
+}
+header{padding:18px 24px;border-bottom:1px solid rgba(255,255,255,0.03)}
+header h1{margin:0;font-size:20px}
+#status{margin-top:6px;color:var(--muted);font-size:13px}
+
+main{display:flex;gap:18px;padding:20px}
+#sections-container{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.section-card{
+  background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);
+}
+.section-card h3{margin:0 0 8px 0}
+.metrics{display:flex;gap:8px;flex-wrap:wrap}
+.metric{background:rgba(255,255,255,0.03);padding:8px;border-radius:8px;flex:1;min-width:110px}
+.valve-btn{margin-top:10px;padding:8px 10px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+.valve-btn.off{background:#334155}
+#controls{width:320px}
+#controls h2{margin-top:0}
+#log{background:rgba(255,255,255,0.03);min-height:300px;padding:10px;border-radius:8px;overflow:auto;font-size:13px;color:var(--muted)}
+canvas{width:100%!important;height:160px!important}
+footer{padding:12px 20px;color:var(--muted);font-size:13px}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vivero — Monitor y Control</title>
+
+  <!-- Chart.js CDN para gráficos sencillos -->
+<script src="/libs/chart.js"></script>
+
+  <!-- Socket.IO client - se cargará desde el mismo servidor -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Vivero — Monitor y Control</h1>
+    <p id="status">Conectando...</p>
+  </header>
+
+  <main>
+    <section id="sections-container">
+      <!-- Plantillas de sección se generan desde app.js -->
+    </section>
+
+    <aside id="controls">
+      <h2>Controles</h2>
+      <div id="log"></div>
+    </aside>
+  </main>
+
+  <footer>
+    <small>Backend: <span id="backend-url"></span></small>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

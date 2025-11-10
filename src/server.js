@@ -1,7 +1,5 @@
 // src/server.js
 // Servidor Express + Socket.IO para recibir datos del Pico y escribir en Firebase Realtime DB
-// Autenticación simple para dispositivos: X-API-KEY header
-// Explicación abajo, linea por linea.
 
 require('dotenv').config(); // carga variables desde .env en desarrollo
 const fs = require('fs');
@@ -22,7 +20,7 @@ const server = http.createServer(app);
 // --- Socket.IO (tiempo real para frontend) ---
 const io = new Server(server, {
   cors: {
-    origin: '*' // en producción, cambia '*' por la URL de tu frontend
+    origin: '*' // en producción: cambia '*' por la URL de tu frontend
   }
 });
 
@@ -32,13 +30,20 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// --- Cargar Service Account (en Render lo subiremos como Secret File)
-// --- Cargar Service Account (soporta 2 modos: SERVICE_ACCOUNT_JSON o SERVICE_ACCOUNT_PATH) ---
+// Servir la carpeta public (UI)
+const PUBLIC_DIR = path.join(__dirname, '..', 'public'); // /vivero-backend/public
+app.use(express.static(PUBLIC_DIR));
+
+// Ruta catch-all para SPA (si quieres que / cargue index.html)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
+// --- Cargar Service Account (soporta SERVICE_ACCOUNT_JSON o SERVICE_ACCOUNT_PATH) ---
 const SERVICE_ACCOUNT_PATH = process.env.SERVICE_ACCOUNT_PATH || null;
 let serviceAccountObj = null;
 
 if (process.env.SERVICE_ACCOUNT_JSON && process.env.SERVICE_ACCOUNT_JSON.trim().length > 0) {
-  // Modo despliegue: la variable de entorno contiene el JSON completo
   try {
     serviceAccountObj = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
     console.log('Firebase Admin: usando SERVICE_ACCOUNT_JSON desde variables de entorno');
@@ -47,10 +52,6 @@ if (process.env.SERVICE_ACCOUNT_JSON && process.env.SERVICE_ACCOUNT_JSON.trim().
     process.exit(1);
   }
 } else if (SERVICE_ACCOUNT_PATH) {
-  // Modo local: cargamos desde archivo en disco (ruta absoluta o relativa)
-  const path = require('path');
-  const fs = require('fs');
-
   // Si la ruta es relativa, normalizamos respecto al proyecto
   const resolvedPath = path.isAbsolute(SERVICE_ACCOUNT_PATH)
     ? SERVICE_ACCOUNT_PATH
@@ -88,7 +89,6 @@ try {
 
 const db = admin.database();
 
-
 // --- Configuración básica del sistema (umbrales por sección; personaliza) ---
 const SECTIONS = {
   sombra: { soilThreshold: 400, tempHigh: 32, tempLow: 10 },
@@ -103,17 +103,6 @@ function checkApiKey(req) {
 }
 
 // --- Endpoint principal: el Pico envía lecturas aquí ---
-// Método: POST /api/data
-// Headers: { "Content-Type": "application/json", "x-api-key": "<tu_api_key>" }
-// Body ejemplo:
-// {
-//   "section": "sombra",
-//   "humedad_suelo": 450,
-//   "luminosidad": 300,
-//   "temp": 26.5,
-//   "humedad_amb": 65,
-//   "device_id": "pico-01"
-// }
 app.post('/api/data', async (req, res) => {
   try {
     if (!checkApiKey(req)) {
@@ -121,7 +110,7 @@ app.post('/api/data', async (req, res) => {
     }
 
     const payload = req.body;
-    const { section, device_id } = payload;
+    const { section } = payload;
     if (!section || !SECTIONS[section]) {
       return res.status(400).json({ error: 'Invalid or missing "section" field' });
     }
@@ -138,7 +127,9 @@ app.post('/api/data', async (req, res) => {
     const suggestion = evaluateAndMaybeTriggerValve(section, payload);
 
     // Emitir evento a clientes conectados via Socket.IO
-    io.emit('sensor-update', { section, payload, suggestion });
+   io.emit('sensor-update', { section, payload, suggestion });
+console.log('Emitido sensor-update -> section:', section, 'payload.humedad_suelo=', payload.humedad_suelo);
+
 
     return res.json({ ok: true, suggestion });
   } catch (err) {
@@ -148,9 +139,6 @@ app.post('/api/data', async (req, res) => {
 });
 
 // --- Endpoint para controlar válvula manualmente desde la web (o móvil)
-// POST /api/control
-// Body: { "section":"sombra", "action":"on" }  action = "on" | "off"
-// Headers: x-api-key
 app.post('/api/control', async (req, res) => {
   try {
     if (!checkApiKey(req)) return res.status(401).json({ error: 'Unauthorized' });
@@ -160,15 +148,11 @@ app.post('/api/control', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload' });
     }
 
-    // Actualizar DB
     const refPath = `/vivero/secciones/${section}`;
     await db.ref(refPath).update({ valvula: action, ultima_actualizacion: new Date().toISOString(), manual_override: true });
 
-    // Emitir evento
     io.emit('control-update', { section, action });
 
-    // Nota: aqui deberías enviar además un comando al microcontrolador para abrir/cerrar la válvula.
-    // Opciones: 1) El Pico consulta periódicamente la DB y aplica el estado 'valvula' 2) Implementar push al Pico (más complejo)
     return res.json({ ok: true, section, action });
   } catch (err) {
     console.error('Error /api/control', err);
@@ -181,6 +165,39 @@ app.get('/api/status', (req, res) => {
   res.json({ ok: true, timestamp: new Date().toISOString() });
 });
 
+// --- Proxy seguro opcional para lecturas desde la UI ---
+app.get('/firebase-proxy', async (req, res) => {
+  try {
+    const p = req.query.path;
+    if (!p) return res.status(400).json({ error: 'missing path' });
+    const snap = await db.ref(p).once('value');
+    return res.json(snap.val());
+  } catch (err) {
+    console.error('firebase-proxy error', err);
+    return res.status(500).json({ error: 'internal' });
+  }
+});
+// GET /api/valve/:section  -> devuelve { ok:true, section, valvula, ultima_actualizacion, data }
+app.get('/api/valve/:section', async (req, res) => {
+  try {
+    const section = req.params.section;
+    if (!section || !SECTIONS[section]) return res.status(400).json({ ok: false, error: 'Invalid section' });
+
+    // Leer desde Firebase
+    const snap = await db.ref(`/vivero/secciones/${section}`).once('value');
+    const data = snap.exists() ? snap.val() : {};
+
+    const valvula = data.valvula || 'off';
+    const ultima = data.ultima_actualizacion || null;
+
+    return res.json({ ok: true, section, valvula, ultima_actualizacion: ultima, data });
+  } catch (err) {
+    console.error('Error /api/valve/:section', err);
+    return res.status(500).json({ ok: false, error: 'internal' });
+  }
+});
+
+
 // --- Lógica de riego automatizada (muy simple) ---
 function evaluateAndMaybeTriggerValve(section, payload) {
   const cfg = SECTIONS[section];
@@ -191,12 +208,9 @@ function evaluateAndMaybeTriggerValve(section, payload) {
   const suggestions = [];
 
   if (soil <= cfg.soilThreshold) {
-    // Decide abrir válvula (en este prototipo, actualizamos la DB y ponemos valvula = "on")
     db.ref(`/vivero/secciones/${section}`).update({ valvula: 'on', ultima_actualizacion: new Date().toISOString(), reason: 'auto_soil_low' }).catch(console.error);
     suggestions.push('Humedad de suelo baja -> abriendo válvula automáticamente.');
   } else {
-    // Si el suelo está bien, cerramos la válvula si estaba abierta por auto
-    // NOTA: no forzamos el cierre si manual_override está activo (mejor política a futuro)
     db.ref(`/vivero/secciones/${section}`).once('value').then(snap => {
       const data = snap.val() || {};
       if (data.valvula === 'on' && data.manual_override !== true && soil > cfg.soilThreshold + 50) {
