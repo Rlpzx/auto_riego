@@ -1,15 +1,29 @@
-// public/main-ui.js
+﻿// public/main-ui.js
 const mainUI = (() => {
   const BASE = ''; // la UI se sirve desde el mismo dominio
   const socket = io();
   const state = { sections: {}, soilTrend: [] };
 
-  // Helper: fetch JSON safe
-  async function fetchJson(url, opts) {
-    const r = await fetch(url, opts);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
+ // Helper: fetch JSON safe (corregido)
+async function fetchJson(url, opts) {
+  const r = await fetch(url, opts);
+  // si quieres logs: console.log('fetch', url, r.status);
+  if (!r.ok) {
+    // lee texto para tener más contexto y lanzar error con info
+    const txt = await r.text().catch(()=>null);
+    const msg = txt ? `HTTP ${r.status} - ${txt}` : `HTTP ${r.status}`;
+    throw new Error(msg);
   }
+  // intentar parseo seguro
+  const text = await r.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    // si no es JSON, devolver texto crudo
+    return text;
+  }
+}
+
 
   // Cargar lista de secciones desde Firebase via proxy
   async function loadSectionsList() {
@@ -101,20 +115,27 @@ const mainUI = (() => {
     socket.on('sensor-update', d => { state.sections[d.section]=d.payload; reloadSections(); });
   }
 
-  async function reloadSections() {
-    await loadSectionsList();
-    const container = document.getElementById('sections-container');
-    container.innerHTML = '';
-    const keys = Object.keys(state.sections).sort();
-    keys.forEach(k => {
-      const v = state.sections[k] || {};
-      const el = document.createElement('div'); el.className='section-card';
-      el.innerHTML = `<div><h4>${k}</h4><div class="meta">Hum: ${v.humedad_suelo ?? '-'} · Temp: ${v.temp ?? '-'}</div></div>
-        <div class="controls"><a href="/section.html?id=${encodeURIComponent(k)}" class="btn">Ver</a></div>`;
-      container.appendChild(el);
-    });
-    document.getElementById('total-sections').textContent = keys.length;
+ async function reloadSections() {
+  await loadSectionsList();
+  const container = document.getElementById('sections-container');
+  if (!container) {
+    console.warn('reloadSections: sections-container no encontrado en DOM');
+    return;
   }
+  container.innerHTML = '';
+  const keys = Object.keys(state.sections || {}).sort();
+  keys.forEach(k => {
+    const v = state.sections[k] || {};
+    const el = document.createElement('div');
+    el.className = 'section-card';
+    el.innerHTML = `<div><h4>${k}</h4><div class="meta">Hum: ${v.humedad_suelo ?? '-'} · Temp: ${v.temp ?? '-'}</div></div>
+      <div class="controls"><a href="/section.html?id=${encodeURIComponent(k)}" class="btn">Ver</a></div>`;
+    container.appendChild(el);
+  });
+  const totalEl = document.getElementById('total-sections');
+  if (totalEl) totalEl.textContent = keys.length;
+}
+
 
   function filterSections(q) {
     const container = document.getElementById('sections-container');
@@ -155,7 +176,46 @@ const mainUI = (() => {
         if (soilChart.data.labels.length>30) { soilChart.data.labels.shift(); soilChart.data.datasets[0].data.shift(); tempChart.data.labels.shift(); tempChart.data.datasets[0].data.shift(); tempChart.data.datasets[1].data.shift(); }
         soilChart.update(); tempChart.update();
 
-        const logs = document.getElementById('recent-logs'); logs.prepend(JSON.stringify(data)+'\n');
+       const logs = document.getElementById('recent-logs');
+if (logs) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+
+  // Formateo de fecha
+  let dateStr = '--';
+  try {
+    if (data.ultima_actualizacion) {
+      const d = new Date(data.ultima_actualizacion);
+      dateStr = d.toLocaleString();
+    } else {
+      dateStr = new Date().toLocaleString();
+    }
+  } catch (e) { dateStr = data.ultima_actualizacion || new Date().toLocaleString(); }
+
+  // Contenido legible
+  entry.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-weight:700">${dateStr}</div>
+      <div style="font-size:13px;color:var(--muted)">Device: ${data.device_id ?? '-'}</div>
+    </div>
+    <div style="margin-top:6px">
+      <strong>Humedad suelo:</strong> ${data.humedad_suelo ?? '-'} &nbsp; | &nbsp;
+      <strong>Luminosidad:</strong> ${data.luminosidad ?? '-'} &nbsp; | &nbsp;
+      <strong>Temp:</strong> ${data.temp ?? '-'} °C &nbsp; | &nbsp;
+      <strong>Humedad amb:</strong> ${data.humedad_amb ?? '-'}
+    </div>
+    <div style="margin-top:6px;color:var(--muted);font-size:13px">
+      <span>Válvula: <strong>${data.valvula ?? '-'}</strong></span>
+      ${data.reason ? ` · <span>Razón: ${data.reason}</span>` : ''}
+    </div>
+  `;
+
+  // prepend y limitar cantidad de entradas mostradas (ej. 50)
+  logs.prepend(entry);
+  const maxEntries = 50;
+  while (logs.children.length > maxEntries) logs.removeChild(logs.lastChild);
+}
+
       } catch(e){ console.warn(e) }
     }
 
@@ -201,3 +261,22 @@ const mainUI = (() => {
     initDashboard, initSections, initSectionView, initReports, initSettings
   };
 })();
+// Auto-inicializador: detecta la página y llama a la init correspondiente
+document.addEventListener('DOMContentLoaded', () => {
+  const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+  if (p === '' || p === 'index.html') {
+    if (mainUI.initDashboard) mainUI.initDashboard();
+  } else if (p === 'sections.html') {
+    if (mainUI.initSections) mainUI.initSections();
+  } else if (p === 'section.html') {
+    if (mainUI.initSectionView) mainUI.initSectionView();
+  } else if (p === 'reports.html') {
+    if (mainUI.initReports) mainUI.initReports();
+  } else if (p === 'settings.html') {
+    if (mainUI.initSettings) mainUI.initSettings();
+  } else {
+    // fallback: try dashboard
+    if (mainUI.initDashboard) mainUI.initDashboard();
+  }
+});
+
