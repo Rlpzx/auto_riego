@@ -1,4 +1,4 @@
-﻿// public/main-ui.js
+// public/main-ui.js
 const mainUI = (() => {
   const BASE = ''; // la UI se sirve desde el mismo dominio
   const socket = io();
@@ -23,37 +23,6 @@ async function fetchJson(url, opts) {
     return text;
   }
 }
-// pequeña utilidad para mostrar mensajes al usuario (status / toasts)
-function showStatus(message, kind='info', timeout=4000) {
-  try {
-    let box = document.getElementById('ui-status-box');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'ui-status-box';
-      box.style.position = 'fixed';
-      box.style.right = '18px';
-      box.style.top = '18px';
-      box.style.zIndex = 9999;
-      document.body.appendChild(box);
-    }
-    const entry = document.createElement('div');
-    entry.textContent = message;
-    entry.style.marginBottom = '8px';
-    entry.style.padding = '10px 12px';
-    entry.style.borderRadius = '8px';
-    entry.style.color = '#072027';
-    entry.style.background = kind === 'error' ? '#fca5a5' : (kind === 'success' ? '#bbf7d0' : '#bae6fd');
-    box.prepend(entry);
-    setTimeout(()=> {
-      try { box.removeChild(entry); } catch(e){}
-      // eliminar caja si vacía
-      if (box.children.length === 0) box.remove();
-    }, timeout);
-  } catch (e) {
-    console.log('showStatus error', e);
-  }
-}
-
 
 
   // Cargar lista de secciones desde Firebase via proxy
@@ -207,46 +176,7 @@ function showStatus(message, kind='info', timeout=4000) {
         if (soilChart.data.labels.length>30) { soilChart.data.labels.shift(); soilChart.data.datasets[0].data.shift(); tempChart.data.labels.shift(); tempChart.data.datasets[0].data.shift(); tempChart.data.datasets[1].data.shift(); }
         soilChart.update(); tempChart.update();
 
-       const logs = document.getElementById('recent-logs');
-if (logs) {
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-
-  // Formateo de fecha
-  let dateStr = '--';
-  try {
-    if (data.ultima_actualizacion) {
-      const d = new Date(data.ultima_actualizacion);
-      dateStr = d.toLocaleString();
-    } else {
-      dateStr = new Date().toLocaleString();
-    }
-  } catch (e) { dateStr = data.ultima_actualizacion || new Date().toLocaleString(); }
-
-  // Contenido legible
-  entry.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="font-weight:700">${dateStr}</div>
-      <div style="font-size:13px;color:var(--muted)">Device: ${data.device_id ?? '-'}</div>
-    </div>
-    <div style="margin-top:6px">
-      <strong>Humedad suelo:</strong> ${data.humedad_suelo ?? '-'} &nbsp; | &nbsp;
-      <strong>Luminosidad:</strong> ${data.luminosidad ?? '-'} &nbsp; | &nbsp;
-      <strong>Temp:</strong> ${data.temp ?? '-'} °C &nbsp; | &nbsp;
-      <strong>Humedad amb:</strong> ${data.humedad_amb ?? '-'}
-    </div>
-    <div style="margin-top:6px;color:var(--muted);font-size:13px">
-      <span>Válvula: <strong>${data.valvula ?? '-'}</strong></span>
-      ${data.reason ? ` · <span>Razón: ${data.reason}</span>` : ''}
-    </div>
-  `;
-
-  // prepend y limitar cantidad de entradas mostradas (ej. 50)
-  logs.prepend(entry);
-  const maxEntries = 50;
-  while (logs.children.length > maxEntries) logs.removeChild(logs.lastChild);
-}
-
+        const logs = document.getElementById('recent-logs'); logs.prepend(JSON.stringify(data)+'\n');
       } catch(e){ console.warn(e) }
     }
 
@@ -255,63 +185,14 @@ if (logs) {
   }
 
   // UI control that posts to proxy endpoint
- // UI control that posts to proxy endpoint (mejorado: loader, optimistic update, mensajes)
-async function uiControl(section, action) {
-  try {
-    // UI: deshabilitar botones y mostrar "Enviando..."
-    const btnOn = document.getElementById('btn-on');
-    const btnOff = document.getElementById('btn-off');
-    if (btnOn) btnOn.disabled = true;
-    if (btnOff) btnOff.disabled = true;
-    showStatus(`Enviando comando ${action} a ${section}...`, 'info');
-
-    // Optimistic: mostrar estado en pantalla inmediatamente
-    const valEl = document.getElementById(`${section}-val`) || document.getElementById('last-read');
-    if (valEl) {
-      // si existe la etiqueta específica de válvula la actualizamos visualmente
-      try { document.querySelector(`#${section}-val`).textContent = action; } catch(e){}
-    }
-
-    const res = await fetch(`/api/ui/control`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ section, action })
-    });
-
-    if (!res.ok) {
-      const txt = await res.text().catch(()=>null);
-      showStatus(`Error control: ${res.status} ${txt||''}`, 'error');
-      // restaurar botones
-      if (btnOn) btnOn.disabled = false;
-      if (btnOff) btnOff.disabled = false;
-      return;
-    }
-
-    const j = await res.json();
-    showStatus(`Acción enviada: ${section} -> ${action}`, 'success');
-
-    // opcional: actualizar UI local con la respuesta
-    if (j && j.ok) {
-      // actualizamos el DOM si existe
-      try {
-        const elem = document.getElementById(`${section}-val`);
-        if (elem) elem.textContent = action;
-      } catch(e){}
-    }
-
-    // re-habilitar botones (el socket actualizará el estado definitivo)
-    if (btnOn) btnOn.disabled = false;
-    if (btnOff) btnOff.disabled = false;
-
-  } catch (err) {
-    console.error('uiControl error', err);
-    showStatus('Error de conexión al enviar control', 'error');
-    const btnOn = document.getElementById('btn-on');
-    const btnOff = document.getElementById('btn-off');
-    if (btnOn) btnOn.disabled = false;
-    if (btnOff) btnOff.disabled = false;
+  async function uiControl(section, action) {
+    try {
+      const res = await fetch(`/api/ui/control`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ section, action }) });
+      if (!res.ok) { alert('Error control '+res.status); return; }
+      const j = await res.json();
+      console.log('control result', j);
+    } catch (e) { console.error(e); }
   }
-}
 
   // Reports page
   async function initReports() {
@@ -359,4 +240,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mainUI.initDashboard) mainUI.initDashboard();
   }
 });
-
+    throw new Error(`Control failed: ${res.status}`);
