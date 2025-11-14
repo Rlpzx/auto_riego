@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login — Auto Riego</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div style="max-width:420px;margin:60px auto;padding:18px;">
+    <h2>Iniciar sesión (Admin)</h2>
+    <div id="login-msg" style="color:var(--muted);margin-bottom:8px"></div>
+    <label>Email</label>
+    <input id="login-email" type="email" placeholder="admin@solutech.com" style="width:100%;padding:10px;margin-bottom:8px" />
+    <label>Contraseña</label>
+    <input id="login-pass" type="password" placeholder="Contraseña" style="width:100%;padding:10px;margin-bottom:12px" />
+    <button id="login-btn" class="btn" style="width:100%">Entrar</button>
+    <div style="margin-top:12px;color:var(--muted);font-size:13px">Acceso de administradores solamente.</div>
+  </div>
+
+  <!-- script externo para evitar CSP inline -->
+  <script src="/login.js"></script>
+</body>
+</html>

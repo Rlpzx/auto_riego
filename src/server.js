@@ -14,6 +14,11 @@ const { Server } = require('socket.io');
 
 const admin = require('firebase-admin');
 
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+
+
 const app = express();
 const server = http.createServer(app);
 
@@ -30,14 +35,52 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Servir la carpeta public (UI)
-const PUBLIC_DIR = path.join(__dirname, '..', 'public'); // /vivero-backend/public
+
+// Rate limiter para login
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 6, // max 6 intentos por minute por IP
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Helper: verificar token JWT
+function authMiddleware(req, res, next) {
+  const auth = req.get('Authorization') || req.get('authorization') || req.header('Authorization') || req.header('authorization');
+  if (!auth) return res.status(401).json({ ok:false, error:'missing auth' });
+  const parts = auth.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ ok:false, error:'invalid auth format' });
+  const token = parts[1];
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = payload;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ ok:false, error:'invalid token' });
+  }
+}
+
+
+// Servir la carpeta public (UI) — pero primero interceptamos la raíz para redirigir al login
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+
+// Middleware muy simple: si el path es exactamente '/', redirigimos al login.
+// Esto evita problemas con expresiones de ruta/comodines en path-to-regexp.
+app.use((req, res, next) => {
+  if (req.path === '/') {
+    return res.redirect('/login.html');
+  }
+  return next();
+});
+
+// Ahora servimos archivos estáticos desde public
 app.use(express.static(PUBLIC_DIR));
 
-// Ruta catch-all para SPA (si quieres que / cargue index.html)
-app.get('/', (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-});
+// Nota: no usamos app.get('/*') porque en algunas versiones provoca errores con path-to-regexp.
+// Si quieres una captura global para SPA, usa una ruta basada en RegExp con cuidado,
+// o mejor maneja la navegación desde el cliente (history API) y deja que el servidor sirva archivos estáticos.
+
+
 
 // --- Cargar Service Account (soporta SERVICE_ACCOUNT_JSON o SERVICE_ACCOUNT_PATH) ---
 const SERVICE_ACCOUNT_PATH = process.env.SERVICE_ACCOUNT_PATH || null;
@@ -234,9 +277,50 @@ io.on('connection', (socket) => {
     console.log('Cliente desconectado:', socket.id);
   });
 });
+
+
+
+
+// POST /api/auth/login  -> { ok:true, token }
+app.post('/api/auth/login', loginLimiter, express.json(), async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ ok:false, error:'missing fields' });
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    // si tienes hash en env:
+    const adminHash = process.env.ADMIN_PASSWORD_HASH || null;
+    const adminPlain = process.env.ADMIN_PLAIN_PASSWORD || null;
+
+    if (email !== adminEmail) return res.status(401).json({ ok:false, error:'invalid credentials' });
+
+    // validar contraseña: si hay hash usamos bcrypt, sino comparamos plain (dev)
+    let ok = false;
+    if (adminHash) {
+      ok = await bcrypt.compare(password, adminHash);
+    } else if (adminPlain) {
+      ok = password === adminPlain;
+    }
+
+    if (!ok) return res.status(401).json({ ok:false, error:'invalid credentials' });
+
+    const token = jwt.sign({ email: adminEmail, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES || '8h' });
+    return res.json({ ok:true, token });
+  } catch (err) {
+    console.error('login error', err);
+    return res.status(500).json({ ok:false, error:'internal' });
+  }
+});
+
+// GET /api/auth/me -> info sobre token
+app.get('/api/auth/me', authMiddleware, (req, res) => {
+  res.json({ ok:true, user: req.user });
+});
+
 // POST /api/ui/control
 // Este endpoint es llamado por la UI (sin API key). El servidor valida origen/sesión y aplica el control
-app.post('/api/ui/control', async (req, res) => {
+app.post('/api/ui/control', authMiddleware, async (req, res) => {
+
   try {
     // Opcional: validar origen o sesión
     // if (req.get('origin') && !req.get('origin').includes('your-frontend-domain')) return res.status(403).json({ ok:false, error:'forbidden' });
