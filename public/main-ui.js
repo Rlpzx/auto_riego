@@ -1,8 +1,89 @@
 ﻿// public/main-ui.js
+// Theme toggle: aplicar preferencia guardada o por defecto modo oscuro
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('vivero_theme', theme);
+}
+function initThemeToggle() {
+  const saved = localStorage.getItem('vivero_theme') || 'dark';
+  applyTheme(saved);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyTheme(cur === 'dark' ? 'light' : 'dark');
+    });
+  }
+}
+document.addEventListener('DOMContentLoaded', initThemeToggle);
+
+
+// Proteger páginas internas: si no hay token válido, redirige al login.
+// Esto NO se ejecuta en login.html (permitimos ver el login).
+function requireAuthOnProtectedPages() {
+  try {
+    const path = (window.location.pathname.split('/').pop() || '').toLowerCase();
+    // páginas públicas donde permitimos acceso sin token:
+    const publicPages = ['login.html', '']; // '' = root (redirigido por servidor)
+    if (publicPages.includes(path)) return;
+
+    // Preferimos la key 'vivero_token' — por compatibilidad también chequeamos 'token'
+    const token = localStorage.getItem('vivero_token') || localStorage.getItem('token');
+    if (!token || token === 'null' || (typeof token === 'string' && token.trim() === '')) {
+      // limpieza por seguridad
+      localStorage.removeItem('vivero_token');
+      localStorage.removeItem('token');
+      // redirigir al login
+      window.location.href = '/login.html';
+    }
+  } catch (e) {
+    console.error('requireAuth error', e);
+    // en caso de error, forzamos login por seguridad
+    localStorage.removeItem('vivero_token');
+    localStorage.removeItem('token');
+    window.location.href = '/login.html';
+  }
+}
+
+
 const mainUI = (() => {
   const BASE = ''; // la UI se sirve desde el mismo dominio
   const socket = io();
   const state = { sections: {}, soilTrend: [] };
+
+
+  function isLogged() {
+  return !!localStorage.getItem('vivero_token');
+}
+function logout() {
+  localStorage.removeItem('vivero_token');
+  localStorage.removeItem('token');
+  sessionStorage.clear();
+  window.location.href = '/login.html';
+}
+
+async function checkSessionAndUpdateUI() {
+  const logged = isLogged();
+  // Mostrar botón logout en header
+  let authArea = document.getElementById('auth-area');
+  if (!authArea) {
+    authArea = document.createElement('div');
+    authArea.id = 'auth-area';
+    document.querySelector('.header').appendChild(authArea);
+  }
+  authArea.innerHTML = '';
+  if (logged) {
+    const out = document.createElement('button');
+    out.className = 'btn ghost'; out.textContent = 'Salir';
+    out.addEventListener('click', logout);
+    authArea.appendChild(out);
+  } else {
+    const link = document.createElement('a');
+    link.href = '/login.html'; link.className = 'btn'; link.textContent = 'Login';
+    authArea.appendChild(link);
+  }
+}
+
 
  // Helper: fetch JSON safe (corregido)
 async function fetchJson(url, opts) {
@@ -253,6 +334,10 @@ if (logs) {
     await refresh();
     socket.on('sensor-update', d => { if (d.section===id){ refresh(); } });
   }
+  // --- Logout ---
+
+
+
 
   // UI control that posts to proxy endpoint
  // UI control that posts to proxy endpoint (mejorado: loader, optimistic update, mensajes)
@@ -272,11 +357,16 @@ async function uiControl(section, action) {
       try { document.querySelector(`#${section}-val`).textContent = action; } catch(e){}
     }
 
-    const res = await fetch(`/api/ui/control`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ section, action })
-    });
+    const token = localStorage.getItem('vivero_token');
+const headers = { 'Content-Type': 'application/json' };
+if (token) headers['Authorization'] = 'Bearer ' + token;
+
+const res = await fetch(`/api/ui/control`, {
+  method: 'POST',
+  headers,
+  body: JSON.stringify({ section, action })
+});
+
 
     if (!res.ok) {
       const txt = await res.text().catch(()=>null);
@@ -343,6 +433,15 @@ async function uiControl(section, action) {
 })();
 // Auto-inicializador: detecta la página y llama a la init correspondiente
 document.addEventListener('DOMContentLoaded', () => {
+  // validar sesión en páginas protegidas
+  requireAuthOnProtectedPages();
+
+  // inicializar tema y mostrar botón login/logout
+  initThemeToggle();
+
+  // actualizar UI de sesión (el auth-area se genera por mainUI más adelante)
+  // Llamamos a checkSessionAndUpdateUI desde dentro de mainUI una vez que la init correspondiente corra.
+
   const p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
   if (p === '' || p === 'index.html') {
     if (mainUI.initDashboard) mainUI.initDashboard();
@@ -359,4 +458,3 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mainUI.initDashboard) mainUI.initDashboard();
   }
 });
-
